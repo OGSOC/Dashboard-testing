@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import type { CanonicalFieldKey, ImportBatchPreview } from '@stockdash/shared';
+import type { CanonicalFieldKey, ImportBatchPreview, Transaction } from '@stockdash/shared';
 import { canonicalFieldKeys } from '@stockdash/shared';
 import { useHoldings, useBrokerageAccounts, useTransactions, useDeleteTransaction } from '../api/hooks/usePortfolio';
-import { useUploadCsv, useCommitCsvImport } from '../api/hooks/useCsvImport';
+import { useUploadCsv, useCommitCsvImport, useResetPortfolio, useUpdateTransaction } from '../api/hooks/useCsvImport';
 import { DataTable } from '../components/common/DataTable';
 import { EmptyState } from '../components/common/EmptyState';
 import { Money, ChangeBadge, TransactionTypeBadge } from '../components/common/Badges';
@@ -18,10 +18,13 @@ const FIELD_LABELS: Record<CanonicalFieldKey, string> = {
   amount: 'Amount',
 };
 
+const CURRENCIES = ['GBP', 'USD', 'EUR'];
+
 function ImportWizard({ onDone }: { onDone: () => void }) {
   const [staged, setStaged] = useState<ImportBatchPreview | null>(null);
   const [mapping, setMapping] = useState<Record<CanonicalFieldKey, string | null> | null>(null);
   const [accountName, setAccountName] = useState('');
+  const [currency, setCurrency] = useState('GBP');
   const upload = useUploadCsv();
   const commit = useCommitCsvImport();
   const { data: accounts } = useBrokerageAccounts();
@@ -54,7 +57,10 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
     return (
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Import transactions from CSV</h3>
-        <p className="text-secondary">Supports Fidelity, Schwab, and Robinhood exports, or any CSV with symbol/date/action/quantity/price columns.</p>
+        <p className="text-secondary">
+          Supports Fidelity, Schwab, Robinhood, and Snowball Analytics exports, or any CSV with symbol/date/action/quantity/price
+          columns — anything that doesn't auto-detect can be mapped manually on the next step.
+        </p>
         <input type="file" accept=".csv" onChange={handleFile} disabled={upload.isPending} />
         {upload.isPending && <p className="text-muted">Parsing…</p>}
         {upload.isError && <p style={{ color: 'var(--critical)' }}>{(upload.error as Error).message}</p>}
@@ -89,17 +95,32 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="section-title">Brokerage account</div>
-      <div className="form-field" style={{ maxWidth: 320 }}>
-        <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          <option value="">Create new account…</option>
-          {(accounts ?? []).map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.accountName}
-            </option>
-          ))}
-        </select>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div className="form-field" style={{ maxWidth: 320 }}>
+          <label>Account</label>
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">Create new account…</option>
+            {(accounts ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.accountName} ({a.currency})
+              </option>
+            ))}
+          </select>
+          {!accountId && (
+            <input placeholder="New account name (e.g. Trading 212 ISA)" value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+          )}
+        </div>
         {!accountId && (
-          <input placeholder="New account name (e.g. Fidelity Individual)" value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+          <div className="form-field" style={{ maxWidth: 140 }}>
+            <label>Currency</label>
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 
@@ -144,6 +165,7 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
               mapping,
               brokerageAccountId: accountId || null,
               newAccountName: accountId ? null : accountName.trim(),
+              currency,
             })
           }
         >
@@ -154,11 +176,130 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
   );
 }
 
+function ResetPortfolioButton() {
+  const [confirming, setConfirming] = useState(false);
+  const reset = useResetPortfolio();
+
+  if (!confirming) {
+    return (
+      <button className="btn" onClick={() => setConfirming(true)}>
+        Reset portfolio
+      </button>
+    );
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+      <span style={{ fontSize: 13, color: 'var(--critical)' }}>Delete all holdings, transactions & accounts?</span>
+      <button
+        className="btn"
+        style={{ background: 'var(--critical)', borderColor: 'var(--critical)', color: 'white' }}
+        disabled={reset.isPending}
+        onClick={() => reset.mutate(undefined, { onSuccess: () => setConfirming(false) })}
+      >
+        {reset.isPending ? 'Resetting…' : 'Yes, delete everything'}
+      </button>
+      <button className="btn" onClick={() => setConfirming(false)}>
+        Cancel
+      </button>
+    </span>
+  );
+}
+
+const TX_TYPES = ['buy', 'sell', 'dividend', 'split', 'transfer_in', 'transfer_out', 'fee', 'interest'];
+
+function EditTransactionRow({ tx, onCancel }: { tx: Transaction; onCancel: () => void }) {
+  const update = useUpdateTransaction();
+  const [form, setForm] = useState({
+    ticker: tx.ticker,
+    transactionType: tx.transactionType as string,
+    tradeDate: tx.tradeDate.slice(0, 10),
+    quantity: tx.quantity,
+    price: tx.price ?? 0,
+    amount: tx.amount,
+  });
+
+  return (
+    <tr>
+      <td>
+        <input type="date" value={form.tradeDate} onChange={(e) => setForm({ ...form, tradeDate: e.target.value })} style={{ width: 130 }} />
+      </td>
+      <td>
+        <input value={form.ticker} onChange={(e) => setForm({ ...form, ticker: e.target.value.toUpperCase() })} style={{ width: 70 }} />
+      </td>
+      <td>
+        <select value={form.transactionType} onChange={(e) => setForm({ ...form, transactionType: e.target.value })}>
+          {TX_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <input
+          type="number"
+          value={form.quantity}
+          onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
+          style={{ width: 80, textAlign: 'right' }}
+        />
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <input
+          type="number"
+          value={form.price}
+          onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+          style={{ width: 80, textAlign: 'right' }}
+        />
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <input
+          type="number"
+          value={form.amount}
+          onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+          style={{ width: 90, textAlign: 'right' }}
+        />
+      </td>
+      <td>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="btn btn-primary"
+            style={{ padding: '2px 8px', fontSize: 12 }}
+            disabled={update.isPending}
+            onClick={() =>
+              update.mutate(
+                {
+                  id: tx.id,
+                  updates: {
+                    ticker: form.ticker,
+                    transactionType: form.transactionType,
+                    tradeDate: form.tradeDate,
+                    quantity: form.quantity,
+                    price: form.price,
+                    amount: form.amount,
+                  },
+                },
+                { onSuccess: onCancel },
+              )
+            }
+          >
+            Save
+          </button>
+          <button className="btn" style={{ padding: '2px 8px', fontSize: 12 }} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export function PortfolioPage() {
   const { data: holdings } = useHoldings();
   const { data: transactions } = useTransactions();
   const deleteTx = useDeleteTransaction();
   const [showImport, setShowImport] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div>
@@ -167,9 +308,12 @@ export function PortfolioPage() {
           <h1 className="page-title">Portfolio</h1>
           <p className="page-subtitle">Holdings and transaction history</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowImport((s) => !s)}>
-          {showImport ? 'Close' : '+ Import CSV'}
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <ResetPortfolioButton />
+          <button className="btn btn-primary" onClick={() => setShowImport((s) => !s)}>
+            {showImport ? 'Close' : '+ Import CSV'}
+          </button>
+        </div>
       </div>
 
       {showImport && (
@@ -190,17 +334,17 @@ export function PortfolioPage() {
               { key: 'ticker', header: 'Ticker', render: (h) => <span className="ticker-chip">{h.ticker}</span> },
               { key: 'account', header: 'Account', render: (h) => h.brokerageAccountName },
               { key: 'qty', header: 'Qty', align: 'right', render: (h) => h.quantity.toLocaleString() },
-              { key: 'avgCost', header: 'Avg cost', align: 'right', render: (h) => <Money value={h.avgCostBasis} /> },
-              { key: 'price', header: 'Price', align: 'right', render: (h) => <Money value={h.lastPrice} /> },
+              { key: 'avgCost', header: 'Avg cost', align: 'right', render: (h) => <Money value={h.avgCostBasis} currency={h.currency} /> },
+              { key: 'price', header: 'Price', align: 'right', render: (h) => <Money value={h.lastPrice} currency={h.currency} /> },
               { key: 'change', header: 'Change', align: 'right', render: (h) => <ChangeBadge value={h.changePct} /> },
-              { key: 'value', header: 'Market value', align: 'right', render: (h) => <Money value={h.marketValue} /> },
+              { key: 'value', header: 'Market value', align: 'right', render: (h) => <Money value={h.marketValue} currency={h.currency} /> },
               {
                 key: 'gain',
                 header: 'Unrealized gain',
                 align: 'right',
                 render: (h) => (
                   <span className={h.unrealizedGain !== null && h.unrealizedGain >= 0 ? 'delta-up' : 'delta-down'}>
-                    <Money value={h.unrealizedGain} /> {h.unrealizedGainPct !== null && `(${h.unrealizedGainPct.toFixed(1)}%)`}
+                    <Money value={h.unrealizedGain} currency={h.currency} /> {h.unrealizedGainPct !== null && `(${h.unrealizedGainPct.toFixed(1)}%)`}
                   </span>
                 ),
               },
@@ -214,27 +358,55 @@ export function PortfolioPage() {
         {(transactions ?? []).length === 0 ? (
           <EmptyState title="No transactions yet" />
         ) : (
-          <DataTable
-            rowKey={(t) => t.id}
-            rows={transactions ?? []}
-            columns={[
-              { key: 'date', header: 'Date', render: (t) => format(new Date(t.tradeDate), 'MMM d, yyyy') },
-              { key: 'ticker', header: 'Ticker', render: (t) => <span className="ticker-chip">{t.ticker}</span> },
-              { key: 'type', header: 'Action', render: (t) => <TransactionTypeBadge type={t.transactionType} /> },
-              { key: 'qty', header: 'Qty', align: 'right', render: (t) => (t.quantity ? t.quantity.toLocaleString() : '—') },
-              { key: 'price', header: 'Price', align: 'right', render: (t) => <Money value={t.price} /> },
-              { key: 'amount', header: 'Amount', align: 'right', render: (t) => <Money value={t.amount} /> },
-              {
-                key: 'actions',
-                header: '',
-                render: (t) => (
-                  <button className="btn" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => deleteTx.mutate(t.id)}>
-                    Delete
-                  </button>
-                ),
-              },
-            ]}
-          />
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Ticker</th>
+                  <th>Action</th>
+                  <th style={{ textAlign: 'right' }}>Qty</th>
+                  <th style={{ textAlign: 'right' }}>Price</th>
+                  <th style={{ textAlign: 'right' }}>Amount</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(transactions ?? []).map((t) =>
+                  editingId === t.id ? (
+                    <EditTransactionRow key={t.id} tx={t} onCancel={() => setEditingId(null)} />
+                  ) : (
+                    <tr key={t.id}>
+                      <td>{format(new Date(t.tradeDate), 'MMM d, yyyy')}</td>
+                      <td>
+                        <span className="ticker-chip">{t.ticker}</span>
+                      </td>
+                      <td>
+                        <TransactionTypeBadge type={t.transactionType} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{t.quantity ? t.quantity.toLocaleString() : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <Money value={t.price} currency={t.currency} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <Money value={t.amount} currency={t.currency} />
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditingId(t.id)}>
+                            Edit
+                          </button>
+                          <button className="btn" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => deleteTx.mutate(t.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

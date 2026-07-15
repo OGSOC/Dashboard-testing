@@ -1,3 +1,5 @@
+import { useMe } from '../../api/hooks/useAuth';
+
 export function ChangeBadge({ value }: { value: number | null }) {
   if (value === null || Number.isNaN(value)) return <span className="text-muted">—</span>;
   const positive = value >= 0;
@@ -9,7 +11,9 @@ export function TransactionTypeBadge({ type }: { type: string }) {
   return <span className={`badge ${cls}`}>{type.replace('_', ' ')}</span>;
 }
 
-export function Money({ value, currency = 'USD' }: { value: number | null; currency?: string }) {
+export function Money({ value, currency }: { value: number | null; currency?: string }) {
+  const { data: user } = useMe();
   if (value === null || Number.isNaN(value)) return <span className="text-muted">—</span>;
-  return <>{new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)}</>;
+  const resolvedCurrency = currency ?? user?.displayCurrency ?? 'GBP';
+  return <>{new Intl.NumberFormat('en-GB', { style: 'currency', currency: resolvedCurrency }).format(value)}</>;
 }

@@ -60,6 +60,7 @@ export async function commitImportBatch(
   mapping: Record<CanonicalFieldKey, string | null>,
   brokerageAccountId: string | null,
   newAccountName: string | null,
+  currency = 'GBP',
 ) {
   const [batch] = await db
     .select()
@@ -71,13 +72,18 @@ export async function commitImportBatch(
   if (batch.status === 'committed') throw new Error('Import batch already committed');
 
   let accountId = brokerageAccountId;
+  let accountCurrency = currency;
   if (!accountId) {
     if (!newAccountName) throw new Error('brokerageAccountId or newAccountName is required');
     const [account] = await db
       .insert(brokerageAccounts)
-      .values({ userId, broker: batch.detectedFormat, accountName: newAccountName })
+      .values({ userId, broker: batch.detectedFormat, accountName: newAccountName, currency })
       .returning();
     accountId = account.id;
+    accountCurrency = account.currency;
+  } else {
+    const [account] = await db.select().from(brokerageAccounts).where(eq(brokerageAccounts.id, accountId)).limit(1);
+    if (account) accountCurrency = account.currency;
   }
 
   const errors: string[] = [];
@@ -131,6 +137,7 @@ export async function commitImportBatch(
         price: candidate.price?.toFixed(6),
         fees: candidate.fees.toFixed(6),
         amount: candidate.amount.toFixed(2),
+        currency: accountCurrency,
         rawRow: raw,
       });
     } catch (err) {

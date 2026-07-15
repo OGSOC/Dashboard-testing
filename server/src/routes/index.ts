@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRouter } from './auth.js';
 import { holdingsRouter } from './holdings.js';
+import { portfolioRouter } from './portfolio.js';
 import { brokerageAccountsRouter } from './brokerageAccounts.js';
 import { transactionsRouter } from './transactions.js';
 import { csvImportsRouter } from './csvImports.js';
@@ -12,7 +13,9 @@ import { insiderTradesRouter } from './insiderTrades.js';
 import { politicalTradesRouter } from './politicalTrades.js';
 import { notificationsRouter } from './notifications.js';
 import { providersRouter } from './providers.js';
+import { marketContextRouter } from './marketContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { attachUser } from '../middleware/attachUser.js';
 
 export const apiRouter = Router();
 
@@ -20,7 +23,9 @@ apiRouter.get('/health', (_req, res) => res.json({ status: 'ok' }));
 apiRouter.use('/auth', authRouter);
 
 apiRouter.use(requireAuth);
+apiRouter.use(attachUser);
 apiRouter.use('/holdings', holdingsRouter);
+apiRouter.use('/portfolio', portfolioRouter);
 apiRouter.use('/brokerage-accounts', brokerageAccountsRouter);
 apiRouter.use('/transactions', transactionsRouter);
 apiRouter.use('/csv-imports', csvImportsRouter);
@@ -32,3 +37,4 @@ apiRouter.use('/insider-trades', insiderTradesRouter);
 apiRouter.use('/political-trades', politicalTradesRouter);
 apiRouter.use('/notifications', notificationsRouter);
 apiRouter.use('/providers', providersRouter);
+apiRouter.use('/market-context', marketContextRouter);

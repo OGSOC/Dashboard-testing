@@ -53,12 +53,19 @@ csvImportsRouter.get('/:id', asyncHandler(async (req, res) => {
 
 csvImportsRouter.post('/:id/commit', asyncHandler(async (req, res) => {
   const userId = req.session.userId!;
-  const { mapping, brokerageAccountId, newAccountName } = req.body ?? {};
+  const { mapping, brokerageAccountId, newAccountName, currency } = req.body ?? {};
   if (!mapping) {
     res.status(400).json({ error: 'mapping is required' });
     return;
   }
-  const result = await commitImportBatch(userId, req.params.id, mapping, brokerageAccountId ?? null, newAccountName ?? null);
+  const result = await commitImportBatch(
+    userId,
+    req.params.id,
+    mapping,
+    brokerageAccountId ?? null,
+    newAccountName ?? null,
+    currency ?? 'GBP',
+  );
   if (!result.committed) {
     res.status(422).json(result);
     return;

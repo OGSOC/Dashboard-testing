@@ -7,6 +7,8 @@ import { useNews } from '../api/hooks/useMarketData';
 import { StatTile } from '../components/common/StatTile';
 import { EmptyState } from '../components/common/EmptyState';
 import { Money } from '../components/common/Badges';
+import { useMe } from '../api/hooks/useAuth';
+import { currencySymbol } from '../lib/currency';
 import { format } from 'date-fns';
 
 export function DashboardPage() {
@@ -16,6 +18,8 @@ export function DashboardPage() {
   const { data: dividendCalendar } = useDividendCalendar();
   const { data: notifications } = useNotifications();
   const { data: news } = useNews();
+  const { data: user } = useMe();
+  const symbol = currencySymbol(user?.displayCurrency);
 
   const chartData = (holdings ?? [])
     .filter((h) => h.marketValue !== null)
@@ -56,11 +60,11 @@ export function DashboardPage() {
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24 }}>
                 <CartesianGrid stroke="var(--gridline)" horizontal={false} />
-                <XAxis type="number" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} stroke="var(--text-muted)" fontSize={12} />
+                <XAxis type="number" tickFormatter={(v) => `${symbol}${(v / 1000).toFixed(0)}k`} stroke="var(--text-muted)" fontSize={12} />
                 <YAxis type="category" dataKey="ticker" width={56} stroke="var(--text-muted)" fontSize={12} />
                 <Tooltip
                   contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }}
-                  formatter={(v: number) => [`$${v.toLocaleString()}`, 'Market value']}
+                  formatter={(v: number) => [`${symbol}${v.toLocaleString()}`, 'Market value']}
                 />
                 <Bar dataKey="value" fill="#2a78d6" radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -81,7 +85,7 @@ export function DashboardPage() {
                   <li key={d.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--gridline)' }}>
                     <span className="ticker-chip">{d.ticker}</span>
                     <span className="text-secondary">{format(new Date(d.exDividendDate), 'MMM d, yyyy')}</span>
-                    <span>${Number(d.amount).toFixed(2)}/sh</span>
+                    <span>{symbol}{Number(d.amount).toFixed(2)}/sh</span>
                   </li>
                 ))}
             </ul>

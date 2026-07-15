@@ -29,6 +29,7 @@ export interface Holding {
   brokerageAccountName: string;
   ticker: string;
   quantity: number;
+  currency: string;
   avgCostBasis: number;
   totalCost: number;
   lastPrice: number | null;
@@ -39,6 +40,7 @@ export interface Holding {
 }
 
 export interface PortfolioSummary {
+  currency: string;
   totalMarketValue: number;
   totalCost: number;
   totalUnrealizedGain: number;
@@ -52,6 +54,7 @@ export interface BrokerageAccount {
   id: string;
   broker: string;
   accountName: string;
+  currency: string;
   createdAt: string;
 }
 
@@ -170,6 +173,7 @@ export type NotificationType =
   | 'political_trade'
   | 'whale_trade'
   | 'dividend_reminder'
+  | 'dividend_increase'
   | 'news'
   | 'system';
 
@@ -194,8 +198,28 @@ export interface ProviderStatusEntry {
   usingSeedData: boolean;
 }
 
+export interface AnalystConsensus {
+  ticker: string;
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+}
+
+export interface MarketContextEntry {
+  news: NewsItem[];
+  consensus: AnalystConsensus | null;
+}
+
+export type MarketContextResponse = Record<string, MarketContextEntry>;
+
+export type SupportedCurrency = 'USD' | 'GBP' | 'EUR';
+
 export interface AuthUser {
   id: string;
   email: string;
   displayName: string | null;
+  displayCurrency: SupportedCurrency;
 }

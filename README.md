@@ -53,8 +53,41 @@ Log in with the `ADMIN_EMAIL` / `ADMIN_PASSWORD` you set in `.env`.
 ## Adding your own portfolio
 
 Once logged in, go to **Portfolio → + Import CSV** and upload a transaction export from your broker.
-Fidelity, Schwab, and Robinhood export formats are auto-detected; anything else falls back to a manual
-column-mapping step. Nothing is committed until you confirm the mapping.
+Fidelity, Schwab, Robinhood, and Snowball Analytics export formats are auto-detected; anything else falls
+back to a manual column-mapping step. Nothing is committed until you confirm the mapping. When creating a
+new account you also pick its currency (GBP by default) — that's the currency your transaction ledger for
+that account is recorded in.
+
+- **Starting over**: **Portfolio → Reset portfolio** deletes all transactions, holdings, and brokerage
+  accounts for a clean slate before a fresh CSV upload. This can't be undone.
+- **Amendments**: every transaction row has an **Edit** action (inline) so you can correct a ticker,
+  date, quantity, price, or amount after import without re-uploading — holdings are recomputed automatically.
+
+## Currency
+
+Pick your reporting currency (GBP/USD/EUR) from the dropdown in the top bar. Portfolio value, holdings,
+and dividend figures are converted to that currency using live ECB rates (via [Frankfurter](https://frankfurter.dev),
+free, no key). The **Transactions** table is the exception — it always shows amounts in the currency you
+recorded them in (per brokerage account), so your original ledger stays exact.
+
+## Dividend analytics
+
+Beyond the calendar and income summary, the **Dividends** page includes:
+- **Calendar / list toggle** — a month-grid view of ex-dividend and pay dates, or a flat list.
+- **Monthly and yearly income charts** — built from dividends you've actually received (from your
+  transaction ledger), not projections.
+- **Dividend growth (CAGR)** per holding and portfolio-wide, computed from each ticker's multi-year
+  ex-dividend history.
+- **Dividend increase notifications** — the daily poll compares each new dividend announcement to the
+  previous one and notifies you when a holding raises its payout.
+- **Growth & DRIP calculator** — projects your portfolio value and dividend income forward given a
+  monthly contribution, price growth rate, dividend growth rate, and whether dividends are reinvested.
+
+## Whale & insider context
+
+The **Whale Activity** and **Insider Trading** pages group trades by ticker, with each ticker's recent
+news headlines and Finnhub analyst consensus (buy/hold/sell breakdown) shown above its trades — so a big
+sale has some context next to it, not just a bare number.
 
 ## Connecting live data (optional)
 
@@ -68,8 +101,13 @@ app to check status live).
 | Dividend calendar & history | Alpha Vantage | `ALPHA_VANTAGE_API_KEY` | Free forever, no card (25 req/day limit) | https://www.alphavantage.co/support/#api-key |
 | Whale / 13F institutional activity | SEC EDGAR | `SEC_EDGAR_CONTACT_EMAIL` | Free, no signup — just a contact string SEC's fair-access policy asks for | n/a |
 | Political / congressional trading | House Stock Watcher + Senate Stock Watcher | *(none)* | Free, public datasets, no key at all | n/a |
+| Analyst consensus (whale/insider context) | Finnhub | `FINNHUB_API_KEY` (same key as above) | Free forever, no card | https://finnhub.io/register |
+| Currency conversion | Frankfurter | *(none)* | Free, no key, no rate limit | n/a |
 
 Check **Settings** in the app at any time to see each provider's live/sample status and last-checked time.
+A provider that's configured but temporarily unreachable (e.g. House Stock Watcher's hosting has been
+intermittently down) shows "Source unavailable — using sample data" rather than a bare error, since the
+app degrades gracefully either way.
 
 ### Notes on data quality
 

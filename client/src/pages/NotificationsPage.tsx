@@ -7,6 +7,7 @@ const TYPE_ICONS: Record<string, string> = {
   political_trade: '🏛',
   whale_trade: '🐋',
   dividend_reminder: '💵',
+  dividend_increase: '📈',
   news: '📰',
   system: 'ℹ',
 };

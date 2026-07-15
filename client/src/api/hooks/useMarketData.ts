@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { NewsItem, InsiderTrade, PoliticalTrade, WhaleTrade, ProviderStatusEntry } from '@stockdash/shared';
+import type { NewsItem, InsiderTrade, PoliticalTrade, WhaleTrade, ProviderStatusEntry, MarketContextResponse } from '@stockdash/shared';
 import { api } from '../client';
 
 export function useNews() {
@@ -24,4 +24,13 @@ export function useWhaleTrades() {
 
 export function useProviderStatus() {
   return useQuery<ProviderStatusEntry[]>({ queryKey: ['providers', 'status'], queryFn: () => api.get('/providers/status'), refetchInterval: 60_000 });
+}
+
+export function useMarketContext(tickers: string[]) {
+  const key = Array.from(new Set(tickers)).sort().join(',');
+  return useQuery<MarketContextResponse>({
+    queryKey: ['market-context', key],
+    queryFn: () => api.get(`/market-context?tickers=${encodeURIComponent(key)}`),
+    enabled: tickers.length > 0,
+  });
 }

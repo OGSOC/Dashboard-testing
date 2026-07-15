@@ -4,17 +4,18 @@ import { canonicalFieldKeys } from '@stockdash/shared';
 const FIELD_ALIASES: Record<CanonicalFieldKey, string[]> = {
   ticker: ['symbol', 'ticker', 'instrument'],
   tradeDate: ['run date', 'date', 'activity date', 'trade date', 'transaction date'],
-  transactionType: ['action', 'trans code', 'transaction type', 'type'],
+  transactionType: ['action', 'trans code', 'transaction type', 'type', 'event'],
   quantity: ['quantity', 'shares', 'qty'],
   price: ['price ($)', 'price', 'price per share'],
-  fees: ['fees ($)', 'fees & comm', 'fees', 'commission'],
-  amount: ['amount ($)', 'amount', 'net amount'],
+  fees: ['fees ($)', 'fees & comm', 'fees', 'commission', 'fee'],
+  amount: ['amount ($)', 'amount', 'net amount', 'total'],
 };
 
 const KNOWN_FORMATS: { name: string; requiredHeaders: string[] }[] = [
   { name: 'fidelity', requiredHeaders: ['run date', 'action', 'symbol', 'quantity', 'price ($)', 'fees ($)', 'amount ($)'] },
   { name: 'schwab', requiredHeaders: ['date', 'action', 'symbol', 'quantity', 'price', 'fees & comm', 'amount'] },
   { name: 'robinhood', requiredHeaders: ['activity date', 'trans code', 'instrument', 'quantity', 'price', 'amount'] },
+  { name: 'snowball', requiredHeaders: ['event', 'date', 'symbol'] },
 ];
 
 function normalizeHeader(h: string): string {
