@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { CanonicalFieldKey, ImportBatchPreview, Transaction } from '@stockdash/shared';
 import { canonicalFieldKeys } from '@stockdash/shared';
 import { useHoldings, useBrokerageAccounts, useTransactions, useDeleteTransaction } from '../api/hooks/usePortfolio';
-import { useUploadCsv, useCommitCsvImport, useResetPortfolio, useUpdateTransaction } from '../api/hooks/useCsvImport';
+import { useUploadCsv, useCommitCsvImport, useCommitSnapshotImport, useResetPortfolio, useUpdateTransaction } from '../api/hooks/useCsvImport';
 import { DataTable } from '../components/common/DataTable';
 import { EmptyState } from '../components/common/EmptyState';
 import { Money, ChangeBadge, TransactionTypeBadge } from '../components/common/Badges';
@@ -20,6 +20,99 @@ const FIELD_LABELS: Record<CanonicalFieldKey, string> = {
 
 const CURRENCIES = ['GBP', 'USD', 'EUR'];
 const REQUIRED_FIELDS: CanonicalFieldKey[] = ['ticker', 'tradeDate', 'transactionType'];
+
+function SnapshotConfirm({ staged, onDone, onBack }: { staged: ImportBatchPreview; onDone: () => void; onBack: () => void }) {
+  const [accountNamePrefix, setAccountNamePrefix] = useState('Snowball Import');
+  const commit = useCommitSnapshotImport();
+
+  if (commit.data?.committed) {
+    return (
+      <div className="card">
+        <h3>Import complete</h3>
+        <p>Imported {commit.data.rowsCommitted} holdings as opening positions dated today.</p>
+        <button className="btn btn-primary" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>
+        Review import — detected format: <strong>Snowball Analytics holdings snapshot</strong> ({staged.snapshotSummary?.tickerCount ?? staged.rowCount}{' '}
+        positions)
+      </h3>
+      <p className="text-secondary" style={{ fontSize: 13 }}>
+        This is a point-in-time snapshot of your holdings (shares, average cost, current dividend info) — not a dated transaction
+        history, since Snowball's holdings export doesn't include one. No column mapping is needed: each row becomes a single
+        opening position dated <strong>today</strong>, using Snowball's own cost-basis figures, so your holdings and yield-on-cost
+        match what Snowball shows. Upcoming ex-dividend and pay dates from the file are added to your dividend calendar too.
+      </p>
+      {staged.snapshotSummary && staged.snapshotSummary.currencies.length > 0 && (
+        <p className="text-secondary" style={{ fontSize: 13 }}>
+          Currencies detected: <strong>{staged.snapshotSummary.currencies.join(', ')}</strong> — a separate account is created per
+          currency, since cost-basis totals can't mix currencies.
+        </p>
+      )}
+      <div className="banner">
+        If you've imported this file before, re-importing will add a duplicate opening position for every holding. Use{' '}
+        <strong>Reset portfolio</strong> first if you want to replace rather than add to what's already there.
+      </div>
+
+      <div className="form-field" style={{ maxWidth: 320 }}>
+        <label>Account name prefix</label>
+        <input value={accountNamePrefix} onChange={(e) => setAccountNamePrefix(e.target.value)} />
+      </div>
+
+      <div className="section-title">Preview (first {Math.min(5, staged.previewRows.length)} rows)</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              {['Holding', 'Shares', 'Currency', 'Cost basis', 'Cost per share'].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {staged.previewRows.slice(0, 5).map((row, i) => (
+              <tr key={i}>
+                {['Holding', 'Shares', 'Currency', 'Cost basis', 'Cost per share'].map((h) => (
+                  <td key={h}>{row[h]}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {commit.data && !commit.data.committed && (
+        <div className="banner" style={{ background: 'color-mix(in srgb, var(--critical) 14%, var(--surface-1))', display: 'block' }}>
+          <strong>Import failed</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {commit.data.errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <button className="btn" onClick={onBack}>
+          Back
+        </button>
+        <button
+          className="btn btn-primary"
+          disabled={commit.isPending || !accountNamePrefix.trim()}
+          onClick={() => commit.mutate({ importBatchId: staged.importBatchId, accountNamePrefix: accountNamePrefix.trim() })}
+        >
+          {commit.isPending ? 'Importing…' : 'Import holdings snapshot'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ImportWizard({ onDone }: { onDone: () => void }) {
   const [staged, setStaged] = useState<ImportBatchPreview | null>(null);
@@ -54,13 +147,17 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
     );
   }
 
+  if (staged?.isSnapshotFormat) {
+    return <SnapshotConfirm staged={staged} onDone={onDone} onBack={() => setStaged(null)} />;
+  }
+
   if (!staged || !mapping) {
     return (
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Import transactions from CSV</h3>
         <p className="text-secondary">
-          Supports Fidelity, Schwab, Robinhood, and Snowball Analytics exports, or any CSV with symbol/date/action/quantity/price
-          columns — anything that doesn't auto-detect can be mapped manually on the next step.
+          Supports Fidelity, Schwab, Robinhood, and Snowball Analytics (transactions or holdings-snapshot) exports, or any CSV with
+          symbol/date/action/quantity/price columns — anything that doesn't auto-detect can be mapped manually on the next step.
         </p>
         <input type="file" accept=".csv" onChange={handleFile} disabled={upload.isPending} />
         {upload.isPending && <p className="text-muted">Parsing…</p>}

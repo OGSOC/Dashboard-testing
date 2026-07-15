@@ -67,6 +67,8 @@ export interface ImportBatchPreview {
   suggestedMapping: Record<string, string | null>;
   previewRows: Record<string, string>[];
   rowCount: number;
+  isSnapshotFormat: boolean;
+  snapshotSummary: { tickerCount: number; currencies: string[] } | null;
 }
 
 export interface WatchlistItem {

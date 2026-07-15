@@ -4,7 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { importBatches } from '../db/schema.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { parseAndStageCsv, commitImportBatch } from '../services/csvImport.service.js';
+import { parseAndStageCsv, commitImportBatch, commitSnowballHoldingsSnapshot } from '../services/csvImport.service.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -66,6 +66,17 @@ csvImportsRouter.post('/:id/commit', asyncHandler(async (req, res) => {
     newAccountName ?? null,
     currency ?? 'GBP',
   );
+  if (!result.committed) {
+    res.status(422).json(result);
+    return;
+  }
+  res.json(result);
+}));
+
+csvImportsRouter.post('/:id/commit-snapshot', asyncHandler(async (req, res) => {
+  const userId = req.session.userId!;
+  const { accountNamePrefix } = req.body ?? {};
+  const result = await commitSnowballHoldingsSnapshot(userId, req.params.id, accountNamePrefix || 'Snowball Import');
   if (!result.committed) {
     res.status(422).json(result);
     return;
