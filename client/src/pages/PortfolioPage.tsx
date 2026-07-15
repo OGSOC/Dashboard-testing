@@ -19,6 +19,7 @@ const FIELD_LABELS: Record<CanonicalFieldKey, string> = {
 };
 
 const CURRENCIES = ['GBP', 'USD', 'EUR'];
+const REQUIRED_FIELDS: CanonicalFieldKey[] = ['ticker', 'tradeDate', 'transactionType'];
 
 function ImportWizard({ onDone }: { onDone: () => void }) {
   const [staged, setStaged] = useState<ImportBatchPreview | null>(null);
@@ -76,23 +77,37 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
 
       <div className="section-title">Column mapping</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-        {canonicalFieldKeys.map((field) => (
-          <div className="form-field" key={field}>
-            <label>{FIELD_LABELS[field]}</label>
-            <select
-              value={mapping[field] ?? ''}
-              onChange={(e) => setMapping({ ...mapping, [field]: e.target.value || null })}
-            >
-              <option value="">— none —</option>
-              {staged.headers.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
+        {canonicalFieldKeys.map((field) => {
+          const required = REQUIRED_FIELDS.includes(field);
+          const unmapped = required && !mapping[field];
+          return (
+            <div className="form-field" key={field}>
+              <label>
+                {FIELD_LABELS[field]}
+                {required && <span style={{ color: 'var(--critical)' }}> *</span>}
+              </label>
+              <select
+                value={mapping[field] ?? ''}
+                onChange={(e) => setMapping({ ...mapping, [field]: e.target.value || null })}
+                style={unmapped ? { borderColor: 'var(--critical)' } : undefined}
+              >
+                <option value="">— none —</option>
+                {staged.headers.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </div>
+      {REQUIRED_FIELDS.some((f) => !mapping[f]) && (
+        <div className="banner" style={{ background: 'color-mix(in srgb, var(--critical) 14%, var(--surface-1))', marginTop: 4 }}>
+          Map a column for {REQUIRED_FIELDS.filter((f) => !mapping[f]).map((f) => FIELD_LABELS[f]).join(', ')} (marked *) before
+          importing — these are required for every row.
+        </div>
+      )}
 
       <div className="section-title">Brokerage account</div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -147,8 +162,14 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
       </div>
 
       {commit.data && !commit.data.committed && (
-        <div className="banner" style={{ background: 'color-mix(in srgb, var(--critical) 14%, var(--surface-1))' }}>
-          {commit.data.errors.length} row(s) failed to import: {commit.data.errors.slice(0, 3).join('; ')}
+        <div className="banner" style={{ background: 'color-mix(in srgb, var(--critical) 14%, var(--surface-1))', display: 'block' }}>
+          <strong>Import failed</strong> — nothing was committed.
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {commit.data.errors.slice(0, 8).map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+          {commit.data.errors.length > 8 && <div>…and {commit.data.errors.length - 8} more.</div>}
         </div>
       )}
 
@@ -158,7 +179,7 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
         </button>
         <button
           className="btn btn-primary"
-          disabled={commit.isPending || (!accountId && !accountName.trim())}
+          disabled={commit.isPending || (!accountId && !accountName.trim()) || REQUIRED_FIELDS.some((f) => !mapping[f])}
           onClick={() =>
             commit.mutate({
               importBatchId: staged.importBatchId,

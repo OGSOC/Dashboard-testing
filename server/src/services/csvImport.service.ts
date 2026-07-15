@@ -71,6 +71,15 @@ export async function commitImportBatch(
   if (!batch) throw new Error('Import batch not found');
   if (batch.status === 'committed') throw new Error('Import batch already committed');
 
+  const missingCoreFields = (['ticker', 'tradeDate', 'transactionType'] as const).filter((f) => !mapping[f]);
+  if (missingCoreFields.length > 0) {
+    const errors = [
+      `Map a column for: ${missingCoreFields.join(', ')} before importing — every row was skipped because ${missingCoreFields.length > 1 ? 'these are' : 'this is'} required.`,
+    ];
+    await db.update(importBatches).set({ status: 'failed', errorLog: errors }).where(eq(importBatches.id, importBatchId));
+    return { committed: false, errors, rowsCommitted: 0 };
+  }
+
   let accountId = brokerageAccountId;
   let accountCurrency = currency;
   if (!accountId) {
@@ -100,7 +109,8 @@ export async function commitImportBatch(
       const amountRaw = mapping.amount ? raw[mapping.amount] : undefined;
 
       if (!tickerRaw || !dateRaw || !typeRaw) {
-        errors.push(`Row ${index + 1}: missing required field(s)`);
+        const blank = [!tickerRaw && 'ticker', !dateRaw && 'trade date', !typeRaw && 'action'].filter(Boolean).join(', ');
+        errors.push(`Row ${index + 1}: blank ${blank} cell`);
         continue;
       }
 
