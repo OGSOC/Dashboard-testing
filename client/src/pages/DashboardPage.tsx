@@ -36,6 +36,14 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {summary && summary.unpricedHoldingCount > 0 && (
+        <div className="banner">
+          {summary.unpricedHoldingCount} of {summary.holdingCount} holdings have no live price (add a Finnhub key in{' '}
+          <Link to="/settings">Settings</Link> for full coverage) — they're counted at cost until priced, so gain/loss only
+          reflects the {summary.holdingCount - summary.unpricedHoldingCount} holdings we can actually price.
+        </div>
+      )}
+
       <div className="stat-grid">
         <StatTile label="Portfolio value" value={summary ? <Money value={summary.totalMarketValue} /> : '—'} />
         <StatTile

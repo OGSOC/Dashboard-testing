@@ -2,7 +2,14 @@ import { useState } from 'react';
 import type { CanonicalFieldKey, ImportBatchPreview, Transaction } from '@stockdash/shared';
 import { canonicalFieldKeys } from '@stockdash/shared';
 import { useHoldings, useBrokerageAccounts, useTransactions, useDeleteTransaction } from '../api/hooks/usePortfolio';
-import { useUploadCsv, useCommitCsvImport, useCommitSnapshotImport, useResetPortfolio, useUpdateTransaction } from '../api/hooks/useCsvImport';
+import {
+  useUploadCsv,
+  useCommitCsvImport,
+  useCommitSnapshotImport,
+  useCommitSnowballTransactions,
+  useResetPortfolio,
+  useUpdateTransaction,
+} from '../api/hooks/useCsvImport';
 import { DataTable } from '../components/common/DataTable';
 import { EmptyState } from '../components/common/EmptyState';
 import { Money, ChangeBadge, TransactionTypeBadge } from '../components/common/Badges';
@@ -114,6 +121,99 @@ function SnapshotConfirm({ staged, onDone, onBack }: { staged: ImportBatchPrevie
   );
 }
 
+function TransactionsConfirm({ staged, onDone, onBack }: { staged: ImportBatchPreview; onDone: () => void; onBack: () => void }) {
+  const [accountNamePrefix, setAccountNamePrefix] = useState('Snowball Import');
+  const commit = useCommitSnowballTransactions();
+  const summary = staged.transactionsSummary;
+
+  if (commit.data?.committed) {
+    return (
+      <div className="card">
+        <h3>Import complete</h3>
+        <p>Imported {commit.data.rowsCommitted} transactions with their original dates.</p>
+        <button className="btn btn-primary" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>
+        Review import — detected format: <strong>Snowball Analytics transactions</strong> ({summary?.transactionCount ?? staged.rowCount}{' '}
+        buy/sell/dividend rows{summary?.dateRange ? `, ${summary.dateRange.from} to ${summary.dateRange.to}` : ''})
+      </h3>
+      <p className="text-secondary" style={{ fontSize: 13 }}>
+        No column mapping is needed — Snowball's export doesn't include an amount column, so it's computed per row (price × quantity
+        ± fee for buys/sells; the net cash amount for dividends) and each transaction keeps its original date.
+      </p>
+      {summary && summary.currencies.length > 0 && (
+        <p className="text-secondary" style={{ fontSize: 13 }}>
+          Currencies detected: <strong>{summary.currencies.join(', ')}</strong> — a separate account is created per currency.
+        </p>
+      )}
+      {summary && summary.skippedCount > 0 && (
+        <div className="banner">
+          {summary.skippedCount} row(s) skipped — account-level cash events (e.g. tax refunds) with no associated ticker don't fit
+          the per-holding transaction ledger.
+        </div>
+      )}
+
+      <div className="form-field" style={{ maxWidth: 320 }}>
+        <label>Account name prefix</label>
+        <input value={accountNamePrefix} onChange={(e) => setAccountNamePrefix(e.target.value)} />
+      </div>
+
+      <div className="section-title">Preview (first {Math.min(5, staged.previewRows.length)} rows)</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              {['Event', 'Date', 'Symbol', 'Price', 'Quantity', 'Currency', 'FeeTax'].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {staged.previewRows.slice(0, 5).map((row, i) => (
+              <tr key={i}>
+                {['Event', 'Date', 'Symbol', 'Price', 'Quantity', 'Currency', 'FeeTax'].map((h) => (
+                  <td key={h}>{row[h]}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {commit.data && !commit.data.committed && (
+        <div className="banner" style={{ background: 'color-mix(in srgb, var(--critical) 14%, var(--surface-1))', display: 'block' }}>
+          <strong>Import failed</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {commit.data.errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <button className="btn" onClick={onBack}>
+          Back
+        </button>
+        <button
+          className="btn btn-primary"
+          disabled={commit.isPending || !accountNamePrefix.trim()}
+          onClick={() => commit.mutate({ importBatchId: staged.importBatchId, accountNamePrefix: accountNamePrefix.trim() })}
+        >
+          {commit.isPending ? 'Importing…' : 'Import transactions'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ImportWizard({ onDone }: { onDone: () => void }) {
   const [staged, setStaged] = useState<ImportBatchPreview | null>(null);
   const [mapping, setMapping] = useState<Record<CanonicalFieldKey, string | null> | null>(null);
@@ -149,6 +249,10 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
 
   if (staged?.isSnapshotFormat) {
     return <SnapshotConfirm staged={staged} onDone={onDone} onBack={() => setStaged(null)} />;
+  }
+
+  if (staged?.specialImportMode === 'snowball_transactions') {
+    return <TransactionsConfirm staged={staged} onDone={onDone} onBack={() => setStaged(null)} />;
   }
 
   if (!staged || !mapping) {

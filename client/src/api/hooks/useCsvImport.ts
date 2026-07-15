@@ -60,6 +60,25 @@ export function useCommitSnapshotImport() {
   });
 }
 
+export function useCommitSnowballTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { importBatchId: string; accountNamePrefix: string }) =>
+      api.post<{ committed: boolean; errors: string[]; rowsCommitted: number }>(
+        `/csv-imports/${params.importBatchId}/commit-snowball-transactions`,
+        { accountNamePrefix: params.accountNamePrefix },
+      ),
+    onSuccess: (result) => {
+      if (result.committed) {
+        qc.invalidateQueries({ queryKey: ['holdings'] });
+        qc.invalidateQueries({ queryKey: ['transactions'] });
+        qc.invalidateQueries({ queryKey: ['brokerage-accounts'] });
+        qc.invalidateQueries({ queryKey: ['dividends'] });
+      }
+    },
+  });
+}
+
 export function useResetPortfolio() {
   const qc = useQueryClient();
   return useMutation({

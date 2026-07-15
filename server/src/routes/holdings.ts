@@ -84,6 +84,8 @@ holdingsRouter.get('/summary', asyncHandler(async (req, res) => {
   let totalMarketValue = 0;
   let totalCost = 0;
   let dayChangeValue = 0;
+  let unpricedCost = 0;
+  let unpricedCount = 0;
 
   for (const r of rows) {
     const quantity = Number(r.quantity);
@@ -91,12 +93,20 @@ holdingsRouter.get('/summary', asyncHandler(async (req, res) => {
     const cost = Number(r.totalCost) * costRate;
     const quote = quotes[r.ticker];
     totalCost += cost;
+
     if (quote) {
       const marketValue = quote.lastPrice * quantity * usdRate;
       totalMarketValue += marketValue;
       if (quote.changePct !== null) {
         dayChangeValue += (marketValue * quote.changePct) / (100 + quote.changePct);
       }
+    } else {
+      // No live price for this ticker (e.g. no Finnhub key, or a ticker outside its coverage) —
+      // fall back to cost as our best estimate of value, so the portfolio total isn't dragged
+      // down by holdings we simply can't price yet, and flag it so the UI can be upfront about it.
+      totalMarketValue += cost;
+      unpricedCost += cost;
+      unpricedCount += 1;
     }
   }
 
@@ -111,5 +121,7 @@ holdingsRouter.get('/summary', asyncHandler(async (req, res) => {
     dayChangeValue,
     dayChangePct: totalMarketValue > 0 ? (dayChangeValue / (totalMarketValue - dayChangeValue)) * 100 : 0,
     holdingCount: rows.length,
+    unpricedHoldingCount: unpricedCount,
+    unpricedCost,
   });
 }));

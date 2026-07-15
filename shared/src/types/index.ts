@@ -48,6 +48,8 @@ export interface PortfolioSummary {
   dayChangeValue: number;
   dayChangePct: number;
   holdingCount: number;
+  unpricedHoldingCount: number;
+  unpricedCost: number;
 }
 
 export interface BrokerageAccount {
@@ -60,6 +62,8 @@ export interface BrokerageAccount {
 
 export type ImportBatchStatus = 'pending_review' | 'committed' | 'failed';
 
+export type SpecialImportMode = 'snowball_holdings_snapshot' | 'snowball_transactions' | null;
+
 export interface ImportBatchPreview {
   importBatchId: string;
   detectedFormat: string;
@@ -68,7 +72,15 @@ export interface ImportBatchPreview {
   previewRows: Record<string, string>[];
   rowCount: number;
   isSnapshotFormat: boolean;
+  specialImportMode: SpecialImportMode;
   snapshotSummary: { tickerCount: number; currencies: string[] } | null;
+  transactionsSummary: {
+    transactionCount: number;
+    skippedCount: number;
+    tickerCount: number;
+    currencies: string[];
+    dateRange: { from: string; to: string } | null;
+  } | null;
 }
 
 export interface WatchlistItem {

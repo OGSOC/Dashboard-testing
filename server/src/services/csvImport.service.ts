@@ -20,7 +20,7 @@ export async function parseAndStageCsv(userId: string, originalFilename: string,
   }
 
   const headers = Object.keys(rows[0]);
-  const { detectedFormat, suggestedMapping, isSnapshotFormat } = detectFormat(headers);
+  const { detectedFormat, suggestedMapping, specialImportMode } = detectFormat(headers);
 
   const [batch] = await db
     .insert(importBatches)
@@ -41,10 +41,12 @@ export async function parseAndStageCsv(userId: string, originalFilename: string,
     detectedFormat,
     headers,
     suggestedMapping,
-    isSnapshotFormat,
+    isSnapshotFormat: specialImportMode === 'snowball_holdings_snapshot',
+    specialImportMode,
     previewRows: rows.slice(0, 20),
     rowCount: rows.length,
-    snapshotSummary: isSnapshotFormat ? summarizeSnowballHoldings(rows) : null,
+    snapshotSummary: specialImportMode === 'snowball_holdings_snapshot' ? summarizeSnowballHoldings(rows) : null,
+    transactionsSummary: specialImportMode === 'snowball_transactions' ? summarizeSnowballTransactions(rows) : null,
   };
 }
 
@@ -88,6 +90,69 @@ function summarizeSnowballHoldings(rows: Record<string, string>[]) {
   return {
     tickerCount: parsed.length,
     currencies: Array.from(new Set(parsed.map((r) => r.currency))),
+  };
+}
+
+interface SnowballTxnRow {
+  ticker: string;
+  transactionType: 'buy' | 'sell' | 'dividend';
+  tradeDate: string;
+  quantity: number;
+  price: number;
+  fees: number;
+  amount: number;
+  currency: string;
+}
+
+/**
+ * Snowball Analytics' "Transactions" export has no amount column — only Price and Quantity (plus
+ * FeeTax) — so the cash amount has to be derived per event type. For DIVIDEND rows specifically,
+ * Quantity holds the net cash amount received rather than a share count (Price is always 0),
+ * which is why this needs dedicated parsing rather than the generic column mapper.
+ */
+function parseSnowballTransactionRows(rows: Record<string, string>[]): { parsed: SnowballTxnRow[]; skipped: number } {
+  const parsed: SnowballTxnRow[] = [];
+  let skipped = 0;
+
+  for (const r of rows) {
+    const event = (r['Event'] ?? '').trim().toUpperCase();
+    const ticker = (r['Symbol'] ?? '').trim().toUpperCase();
+    const currency = (r['Currency'] ?? 'GBP').trim().toUpperCase();
+    const price = Number(r['Price']) || 0;
+    const quantity = Number(r['Quantity']) || 0;
+    const feeTax = Number(r['FeeTax']) || 0;
+    const tradeDate = parseSnowballDate(r['Date']);
+
+    if (!ticker || !tradeDate) {
+      skipped += 1;
+      continue;
+    }
+
+    if (event === 'BUY') {
+      parsed.push({ ticker, transactionType: 'buy', tradeDate, quantity, price, fees: feeTax, amount: -(price * quantity + feeTax), currency });
+    } else if (event === 'SELL') {
+      parsed.push({ ticker, transactionType: 'sell', tradeDate, quantity, price, fees: feeTax, amount: price * quantity - feeTax, currency });
+    } else if (event === 'DIVIDEND') {
+      // Quantity is the net cash amount received for dividend rows in this export, not a share count.
+      parsed.push({ ticker, transactionType: 'dividend', tradeDate, quantity: 0, price: 0, fees: feeTax, amount: quantity, currency });
+    } else {
+      // e.g. TAX_RETURN — an account-level cash event with no ticker, doesn't fit the per-holding ledger.
+      skipped += 1;
+    }
+  }
+
+  return { parsed, skipped };
+}
+
+function summarizeSnowballTransactions(rows: Record<string, string>[]) {
+  const { parsed, skipped } = parseSnowballTransactionRows(rows);
+  const dates = parsed.map((r) => r.tradeDate).sort();
+  return {
+    transactionCount: parsed.length,
+    skippedCount: skipped,
+    tickerCount: new Set(parsed.map((r) => r.ticker)).size,
+    currencies: Array.from(new Set(parsed.map((r) => r.currency))),
+    dateRange: dates.length > 0 ? { from: dates[0], to: dates[dates.length - 1] } : null,
   };
 }
 
@@ -295,4 +360,62 @@ export async function commitSnowballHoldingsSnapshot(userId: string, importBatch
   await recomputeHoldings(userId);
 
   return { committed: true, errors: [], rowsCommitted: holdingRows.length };
+}
+
+/**
+ * Commits a Snowball Analytics "Transactions" export — a real dated buy/sell/dividend ledger, so
+ * (unlike the holdings snapshot) this preserves full history. Amount is computed per row since
+ * the export doesn't provide one directly (see parseSnowballTransactionRows). Rows are split
+ * across one brokerage account per currency for the same reason as the holdings snapshot import.
+ */
+export async function commitSnowballTransactions(userId: string, importBatchId: string, accountNamePrefix: string) {
+  const [batch] = await db
+    .select()
+    .from(importBatches)
+    .where(and(eq(importBatches.id, importBatchId), eq(importBatches.userId, userId)))
+    .limit(1);
+
+  if (!batch) throw new Error('Import batch not found');
+  if (batch.status === 'committed') throw new Error('Import batch already committed');
+
+  const { parsed: txnRows } = parseSnowballTransactionRows(batch.rawRows as Record<string, string>[]);
+  if (txnRows.length === 0) {
+    const errors = ['No valid BUY/SELL/DIVIDEND rows found with a ticker and a parseable date.'];
+    await db.update(importBatches).set({ status: 'failed', errorLog: errors }).where(eq(importBatches.id, importBatchId));
+    return { committed: false, errors, rowsCommitted: 0 };
+  }
+
+  const accountIdByCurrency = new Map<string, string>();
+
+  await db.transaction(async (tx) => {
+    for (const currency of new Set(txnRows.map((r) => r.currency))) {
+      const [account] = await tx
+        .insert(brokerageAccounts)
+        .values({ userId, broker: 'snowball_transactions', accountName: `${accountNamePrefix} (${currency})`, currency })
+        .returning();
+      accountIdByCurrency.set(currency, account.id);
+    }
+
+    const rowsToInsert = txnRows.map((r) => ({
+      userId,
+      brokerageAccountId: accountIdByCurrency.get(r.currency)!,
+      importBatchId,
+      ticker: r.ticker,
+      transactionType: r.transactionType,
+      tradeDate: r.tradeDate,
+      quantity: r.quantity.toFixed(6),
+      price: r.price.toFixed(6),
+      fees: r.fees.toFixed(6),
+      amount: r.amount.toFixed(2),
+      currency: r.currency,
+      rawRow: { note: 'Imported from a Snowball Analytics transactions export' },
+    }));
+    await tx.insert(transactions).values(rowsToInsert);
+
+    await tx.update(importBatches).set({ status: 'committed' }).where(eq(importBatches.id, importBatchId));
+  });
+
+  await recomputeHoldings(userId);
+
+  return { committed: true, errors: [], rowsCommitted: txnRows.length };
 }
