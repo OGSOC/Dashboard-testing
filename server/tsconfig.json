@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@stockdash/shared": ["../shared/src/index.ts"],
+      "@stockdash/shared/*": ["../shared/src/*"]
+    }
+  },
+  "include": ["src", "seed"]
+}
