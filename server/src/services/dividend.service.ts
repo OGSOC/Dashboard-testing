@@ -100,7 +100,7 @@ export async function getDividendSummary(userId: string, displayCurrency = 'GBP'
   const ytdStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
   const trailing12mStart = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [ytdRows, trailingRows, heldRows] = await Promise.all([
+  const [ytdRows, trailingRows, allTimeRows, heldRows] = await Promise.all([
     db
       .select({ amount: transactions.amount, currency: transactions.currency })
       .from(transactions)
@@ -110,15 +110,20 @@ export async function getDividendSummary(userId: string, displayCurrency = 'GBP'
       .from(transactions)
       .where(and(eq(transactions.userId, userId), eq(transactions.transactionType, 'dividend'), gte(transactions.tradeDate, trailing12mStart))),
     db
+      .select({ amount: transactions.amount, currency: transactions.currency })
+      .from(transactions)
+      .where(and(eq(transactions.userId, userId), eq(transactions.transactionType, 'dividend'))),
+    db
       .select({ ticker: holdings.ticker, quantity: holdings.quantity, totalCost: holdings.totalCost, accountCurrency: brokerageAccounts.currency })
       .from(holdings)
       .innerJoin(brokerageAccounts, eq(holdings.brokerageAccountId, brokerageAccounts.id))
       .where(eq(holdings.userId, userId)),
   ]);
 
-  const [totalReceivedYtd, totalReceivedTrailing12m] = await Promise.all([
+  const [totalReceivedYtd, totalReceivedTrailing12m, totalReceivedAllTime] = await Promise.all([
     sumConverted(ytdRows, displayCurrency),
     sumConverted(trailingRows, displayCurrency),
+    sumConverted(allTimeRows, displayCurrency),
   ]);
 
   const tickers = heldRows.map((h) => h.ticker);
@@ -169,6 +174,7 @@ export async function getDividendSummary(userId: string, displayCurrency = 'GBP'
     currency: displayCurrency,
     totalReceivedYtd,
     totalReceivedTrailing12m,
+    totalReceivedAllTime,
     projectedNext12m: Array.from(projectedByTicker.values()).reduce((a, b) => a + b, 0),
     yieldOnCostByTicker,
   };

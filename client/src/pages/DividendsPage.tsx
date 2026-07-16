@@ -40,6 +40,7 @@ export function DividendsPage() {
       <div className="stat-grid">
         <StatTile label="Received YTD" value={summary ? <Money value={summary.totalReceivedYtd} /> : '—'} />
         <StatTile label="Received (trailing 12mo)" value={summary ? <Money value={summary.totalReceivedTrailing12m} /> : '—'} />
+        <StatTile label="Received (all time)" value={summary ? <Money value={summary.totalReceivedAllTime} /> : '—'} />
         <StatTile label="Projected (next 12mo)" value={summary ? <Money value={summary.projectedNext12m} /> : '—'} />
         <StatTile
           label="Portfolio dividend growth (CAGR)"

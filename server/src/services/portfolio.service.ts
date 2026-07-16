@@ -59,7 +59,11 @@ export async function recomputeHoldings(userId: string): Promise<void> {
   await db.delete(holdings).where(eq(holdings.userId, userId));
 
   const rowsToInsert = Array.from(lots.entries())
-    .filter(([, lot]) => lot.quantity > 0.000001)
+    // Filters out both true zero positions and floating-point dust left over from many small
+    // buys/sells not netting out exactly (some brokers export fractional shares to 6-8dp, and
+    // rounding error across dozens of transactions can leave e.g. 0.0000004 "shares" behind) —
+    // a position worth a fraction of a penny shouldn't show up as a phantom holding.
+    .filter(([, lot]) => lot.quantity > 0.0001)
     .map(([key, lot]) => {
       const [brokerageAccountId, ticker] = key.split(':');
       return {

@@ -522,6 +522,12 @@ export function PortfolioPage() {
   const deleteTx = useDeleteTransaction();
   const [showImport, setShowImport] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [txFilter, setTxFilter] = useState<'current' | 'all'>('current');
+
+  const heldTickers = new Set((holdings ?? []).map((h) => h.ticker));
+  const allTransactions = transactions ?? [];
+  const visibleTransactions = txFilter === 'current' ? allTransactions.filter((t) => heldTickers.has(t.ticker)) : allTransactions;
+  const hiddenCount = allTransactions.length - visibleTransactions.length;
 
   return (
     <div>
@@ -576,9 +582,26 @@ export function PortfolioPage() {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Transactions</h3>
-        {(transactions ?? []).length === 0 ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ marginTop: 0, marginBottom: 0 }}>Transactions</h3>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {txFilter === 'current' && hiddenCount > 0 && (
+              <span className="text-muted" style={{ fontSize: 12 }}>
+                {hiddenCount} hidden from fully-sold positions
+              </span>
+            )}
+            <button className={`btn${txFilter === 'current' ? ' btn-primary' : ''}`} onClick={() => setTxFilter('current')}>
+              Current holdings
+            </button>
+            <button className={`btn${txFilter === 'all' ? ' btn-primary' : ''}`} onClick={() => setTxFilter('all')}>
+              All transactions
+            </button>
+          </div>
+        </div>
+        {allTransactions.length === 0 ? (
           <EmptyState title="No transactions yet" />
+        ) : visibleTransactions.length === 0 ? (
+          <EmptyState title="No transactions for current holdings" body="Switch to “All transactions” to see full history, including fully-sold positions." />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table">
@@ -594,7 +617,7 @@ export function PortfolioPage() {
                 </tr>
               </thead>
               <tbody>
-                {(transactions ?? []).map((t) =>
+                {visibleTransactions.map((t) =>
                   editingId === t.id ? (
                     <EditTransactionRow key={t.id} tx={t} onCancel={() => setEditingId(null)} />
                   ) : (

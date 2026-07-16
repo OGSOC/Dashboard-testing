@@ -113,6 +113,7 @@ export interface DividendIncomeEntry {
 export interface DividendSummary {
   totalReceivedYtd: number;
   totalReceivedTrailing12m: number;
+  totalReceivedAllTime: number;
   projectedNext12m: number;
   yieldOnCostByTicker: { ticker: string; yieldOnCost: number; annualIncome: number }[];
 }
