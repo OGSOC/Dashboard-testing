@@ -11,13 +11,14 @@ watchlistRouter.get('/', asyncHandler(async (req, res) => {
   const userId = req.session.userId!;
   const rows = await db.select().from(watchlist).where(eq(watchlist.userId, userId));
   const quotes = await getQuotesForTickers(rows.map((r) => r.ticker));
+  const rate = req.currentUser?.fxRateFromUsd ?? 1;
   res.json(
     rows.map((r) => ({
       id: r.id,
       ticker: r.ticker,
       notes: r.notes,
       addedAt: r.addedAt,
-      lastPrice: quotes[r.ticker]?.lastPrice ?? null,
+      lastPrice: quotes[r.ticker] ? quotes[r.ticker].lastPrice * rate : null,
       changePct: quotes[r.ticker]?.changePct ?? null,
     })),
   );

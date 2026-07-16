@@ -43,10 +43,16 @@ export function SettingsPage() {
                     <td>{info.label}</td>
                     <td className="text-secondary">{info.feature}</td>
                     <td>
-                      {p.usingSeedData ? (
+                      {!p.isConfigured ? (
+                        <span className="badge badge-neutral">Add API key to enable</span>
+                      ) : !p.lastRunAt ? (
+                        <span className="badge badge-neutral">Not checked yet</span>
+                      ) : p.usingSeedData && p.lastError ? (
+                        <span className="badge badge-neutral" title={p.lastError}>
+                          Source unavailable — using sample data
+                        </span>
+                      ) : p.usingSeedData ? (
                         <span className="badge badge-neutral">Using sample data</span>
-                      ) : p.lastError ? (
-                        <span className="badge badge-sell">Error — see log</span>
                       ) : (
                         <span className="badge badge-buy">Live</span>
                       )}
@@ -80,6 +86,12 @@ export function SettingsPage() {
           Any feature whose provider isn't configured (or is temporarily unreachable) automatically falls back to realistic sample
           data so the app stays fully usable. Add the API keys above at any time — no restart required beyond the server picking up
           the new environment variables.
+        </p>
+        <p className="text-secondary">
+          <strong>House Stock Watcher</strong> is a free, single-maintainer public dataset (not a corporate API) — its hosting has
+          been intermittently unreachable. When it's down, House-chamber trades fall back to sample data automatically while Senate
+          Stock Watcher keeps delivering live Senate trades; nothing else in the app is affected, and it's not something a
+          restart or API key can fix on our end.
         </p>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { importBatches } from '../db/schema.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { parseAndStageCsv, commitImportBatch } from '../services/csvImport.service.js';
+import { parseAndStageCsv, commitImportBatch, commitSnowballHoldingsSnapshot, commitSnowballTransactions } from '../services/csvImport.service.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -53,12 +53,41 @@ csvImportsRouter.get('/:id', asyncHandler(async (req, res) => {
 
 csvImportsRouter.post('/:id/commit', asyncHandler(async (req, res) => {
   const userId = req.session.userId!;
-  const { mapping, brokerageAccountId, newAccountName } = req.body ?? {};
+  const { mapping, brokerageAccountId, newAccountName, currency } = req.body ?? {};
   if (!mapping) {
     res.status(400).json({ error: 'mapping is required' });
     return;
   }
-  const result = await commitImportBatch(userId, req.params.id, mapping, brokerageAccountId ?? null, newAccountName ?? null);
+  const result = await commitImportBatch(
+    userId,
+    req.params.id,
+    mapping,
+    brokerageAccountId ?? null,
+    newAccountName ?? null,
+    currency ?? 'GBP',
+  );
+  if (!result.committed) {
+    res.status(422).json(result);
+    return;
+  }
+  res.json(result);
+}));
+
+csvImportsRouter.post('/:id/commit-snapshot', asyncHandler(async (req, res) => {
+  const userId = req.session.userId!;
+  const { accountNamePrefix } = req.body ?? {};
+  const result = await commitSnowballHoldingsSnapshot(userId, req.params.id, accountNamePrefix || 'Snowball Import');
+  if (!result.committed) {
+    res.status(422).json(result);
+    return;
+  }
+  res.json(result);
+}));
+
+csvImportsRouter.post('/:id/commit-snowball-transactions', asyncHandler(async (req, res) => {
+  const userId = req.session.userId!;
+  const { accountNamePrefix } = req.body ?? {};
+  const result = await commitSnowballTransactions(userId, req.params.id, accountNamePrefix || 'Snowball Import');
   if (!result.committed) {
     res.status(422).json(result);
     return;

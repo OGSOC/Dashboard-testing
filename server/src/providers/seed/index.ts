@@ -14,7 +14,9 @@ import {
   seedPoliticalTrades,
   seedWhaleTrades,
   seedDividends,
+  seedAnalystConsensus,
 } from './data.js';
+import type { AnalystConsensus } from '../finnhub/recommendation.js';
 
 export const seedQuoteProvider: QuoteProvider = {
   name: 'seed',
@@ -60,3 +62,9 @@ export const seedWhaleProvider: WhaleProvider = {
     return seedWhaleTrades.filter((t) => t.ticker === ticker.toUpperCase());
   },
 };
+
+export async function getSeedAnalystConsensus(ticker: string): Promise<AnalystConsensus | null> {
+  const c = seedAnalystConsensus[ticker.toUpperCase()];
+  if (!c) return null;
+  return { ticker: ticker.toUpperCase(), period: 'seed', ...c };
+}

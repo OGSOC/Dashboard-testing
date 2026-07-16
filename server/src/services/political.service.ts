@@ -34,7 +34,10 @@ export async function refreshPoliticalTrades() {
       anySucceeded = true;
       await recordProviderRun(provider.name, true, false, null);
     } catch (err) {
-      await recordProviderRun(provider.name, true, false, String(err));
+      // This source is unreachable right now (e.g. the free community dataset is down) — the
+      // sibling source and/or seed data still cover this chamber, so treat it the same as any
+      // other "falling back to sample data" case rather than a scary unexplained error.
+      await recordProviderRun(provider.name, true, true, String(err));
     }
   }
 

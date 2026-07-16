@@ -17,7 +17,14 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   displayName: text('display_name'),
+  displayCurrency: text('display_currency').notNull().default('GBP'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const fxRateCache = pgTable('fx_rate_cache', {
+  currency: text('currency').primaryKey(),
+  rateFromUsd: numeric('rate_from_usd', { precision: 18, scale: 8 }).notNull(),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const brokerageAccounts = pgTable('brokerage_accounts', {
@@ -25,6 +32,7 @@ export const brokerageAccounts = pgTable('brokerage_accounts', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   broker: text('broker').notNull(),
   accountName: text('account_name').notNull(),
+  currency: text('currency').notNull().default('GBP'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -31,3 +31,15 @@ export function useLogout() {
     },
   });
 }
+
+export function useUpdateCurrency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (displayCurrency: string) => api.patch<AuthUser>('/auth/me', { displayCurrency }),
+    onSuccess: (user) => {
+      qc.setQueryData(['auth', 'me'], user);
+      // Every money figure in the app depends on the display currency, so refetch everything.
+      qc.invalidateQueries();
+    },
+  });
+}

@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { holdings, transactions } from '../db/schema.js';
+import { holdings, transactions, brokerageAccounts, importBatches } from '../db/schema.js';
 
 interface Lot {
   quantity: number;
@@ -59,7 +59,11 @@ export async function recomputeHoldings(userId: string): Promise<void> {
   await db.delete(holdings).where(eq(holdings.userId, userId));
 
   const rowsToInsert = Array.from(lots.entries())
-    .filter(([, lot]) => lot.quantity > 0.000001)
+    // Filters out both true zero positions and floating-point dust left over from many small
+    // buys/sells not netting out exactly (some brokers export fractional shares to 6-8dp, and
+    // rounding error across dozens of transactions can leave e.g. 0.0000004 "shares" behind) —
+    // a position worth a fraction of a penny shouldn't show up as a phantom holding.
+    .filter(([, lot]) => lot.quantity > 0.0001)
     .map(([key, lot]) => {
       const [brokerageAccountId, ticker] = key.split(':');
       return {
@@ -79,4 +83,47 @@ export async function recomputeHoldings(userId: string): Promise<void> {
 
 export async function getHoldingsForUser(userId: string) {
   return db.select().from(holdings).where(eq(holdings.userId, userId));
+}
+
+/** Wipes all transactions, holdings, import batches, and brokerage accounts for a user — a clean slate for a fresh CSV upload. */
+export async function resetPortfolioForUser(userId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(importBatches).where(eq(importBatches.userId, userId));
+    await tx.delete(brokerageAccounts).where(eq(brokerageAccounts.userId, userId));
+  });
+}
+
+export async function updateTransaction(
+  userId: string,
+  transactionId: string,
+  updates: Partial<{
+    ticker: string;
+    transactionType: string;
+    tradeDate: string;
+    quantity: number;
+    price: number | null;
+    fees: number;
+    amount: number;
+  }>,
+): Promise<boolean> {
+  const setValues: Record<string, unknown> = {};
+  if (updates.ticker !== undefined) setValues.ticker = updates.ticker.toUpperCase();
+  if (updates.transactionType !== undefined) setValues.transactionType = updates.transactionType;
+  if (updates.tradeDate !== undefined) setValues.tradeDate = updates.tradeDate;
+  if (updates.quantity !== undefined) setValues.quantity = updates.quantity.toFixed(6);
+  if (updates.price !== undefined) setValues.price = updates.price !== null ? updates.price.toFixed(6) : null;
+  if (updates.fees !== undefined) setValues.fees = updates.fees.toFixed(6);
+  if (updates.amount !== undefined) setValues.amount = updates.amount.toFixed(2);
+
+  if (Object.keys(setValues).length === 0) return false;
+
+  const result = await db
+    .update(transactions)
+    .set(setValues)
+    .where(and(eq(transactions.id, transactionId), eq(transactions.userId, userId)))
+    .returning();
+
+  if (result.length === 0) return false;
+  await recomputeHoldings(userId);
+  return true;
 }

@@ -20,6 +20,7 @@ export function useCommitCsvImport() {
       mapping: Record<CanonicalFieldKey, string | null>;
       brokerageAccountId: string | null;
       newAccountName: string | null;
+      currency: string;
     }) =>
       api.post<{ committed: boolean; errors: string[]; rowsCommitted: number }>(
         `/csv-imports/${params.importBatchId}/commit`,
@@ -27,6 +28,7 @@ export function useCommitCsvImport() {
           mapping: params.mapping,
           brokerageAccountId: params.brokerageAccountId,
           newAccountName: params.newAccountName,
+          currency: params.currency,
         },
       ),
     onSuccess: (result) => {
@@ -35,6 +37,78 @@ export function useCommitCsvImport() {
         qc.invalidateQueries({ queryKey: ['transactions'] });
         qc.invalidateQueries({ queryKey: ['brokerage-accounts'] });
       }
+    },
+  });
+}
+
+export function useCommitSnapshotImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { importBatchId: string; accountNamePrefix: string }) =>
+      api.post<{ committed: boolean; errors: string[]; rowsCommitted: number }>(
+        `/csv-imports/${params.importBatchId}/commit-snapshot`,
+        { accountNamePrefix: params.accountNamePrefix },
+      ),
+    onSuccess: (result) => {
+      if (result.committed) {
+        qc.invalidateQueries({ queryKey: ['holdings'] });
+        qc.invalidateQueries({ queryKey: ['transactions'] });
+        qc.invalidateQueries({ queryKey: ['brokerage-accounts'] });
+        qc.invalidateQueries({ queryKey: ['dividends'] });
+      }
+    },
+  });
+}
+
+export function useCommitSnowballTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { importBatchId: string; accountNamePrefix: string }) =>
+      api.post<{ committed: boolean; errors: string[]; rowsCommitted: number }>(
+        `/csv-imports/${params.importBatchId}/commit-snowball-transactions`,
+        { accountNamePrefix: params.accountNamePrefix },
+      ),
+    onSuccess: (result) => {
+      if (result.committed) {
+        qc.invalidateQueries({ queryKey: ['holdings'] });
+        qc.invalidateQueries({ queryKey: ['transactions'] });
+        qc.invalidateQueries({ queryKey: ['brokerage-accounts'] });
+        qc.invalidateQueries({ queryKey: ['dividends'] });
+      }
+    },
+  });
+}
+
+export function useResetPortfolio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/portfolio/reset', { confirm: 'RESET' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['holdings'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['brokerage-accounts'] });
+    },
+  });
+}
+
+export function useUpdateTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      id: string;
+      updates: Partial<{
+        ticker: string;
+        transactionType: string;
+        tradeDate: string;
+        quantity: number;
+        price: number | null;
+        fees: number;
+        amount: number;
+      }>;
+    }) => api.patch(`/transactions/${params.id}`, params.updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['holdings'] });
     },
   });
 }

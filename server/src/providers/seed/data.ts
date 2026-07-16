@@ -27,6 +27,21 @@ export const seedQuotes: Record<string, { price: number; prevClose: number }> = 
   VOO: { price: 561.2, prevClose: 558.9 },
 };
 
+export const seedAnalystConsensus: Record<string, { strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }> = {
+  AAPL: { strongBuy: 12, buy: 18, hold: 8, sell: 1, strongSell: 0 },
+  MSFT: { strongBuy: 20, buy: 14, hold: 3, sell: 0, strongSell: 0 },
+  NVDA: { strongBuy: 25, buy: 10, hold: 2, sell: 0, strongSell: 0 },
+  GOOGL: { strongBuy: 15, buy: 16, hold: 6, sell: 0, strongSell: 0 },
+  AMZN: { strongBuy: 18, buy: 15, hold: 4, sell: 0, strongSell: 0 },
+  TSLA: { strongBuy: 8, buy: 9, hold: 12, sell: 6, strongSell: 2 },
+  JNJ: { strongBuy: 6, buy: 10, hold: 8, sell: 1, strongSell: 0 },
+  KO: { strongBuy: 5, buy: 9, hold: 9, sell: 1, strongSell: 0 },
+  PG: { strongBuy: 4, buy: 11, hold: 8, sell: 1, strongSell: 0 },
+  JPM: { strongBuy: 10, buy: 12, hold: 5, sell: 0, strongSell: 0 },
+  XOM: { strongBuy: 7, buy: 8, hold: 9, sell: 2, strongSell: 0 },
+  VOO: { strongBuy: 0, buy: 0, hold: 0, sell: 0, strongSell: 0 },
+};
+
 export const seedNews = [
   { ticker: 'AAPL', headline: 'Apple unveils next-gen chip lineup for MacBook Pro', source: 'Reuters', daysAgo: 1 },
   { ticker: 'AAPL', headline: 'Apple services revenue hits new quarterly record', source: 'Bloomberg', daysAgo: 4 },
@@ -113,25 +128,43 @@ export const seedWhaleTrades = [
   externalId: `seed-whale-${t.ticker}-${i}`,
 }));
 
-export const seedDividends = [
-  { ticker: 'AAPL', amount: 0.26, exDaysAgo: -18, payDaysAgo: -33 },
-  { ticker: 'MSFT', amount: 0.83, exDaysAgo: -10, payDaysAgo: -25 },
-  { ticker: 'JNJ', amount: 1.24, exDaysAgo: -5, payDaysAgo: -20 },
-  { ticker: 'KO', amount: 0.51, exDaysAgo: -2, payDaysAgo: -17 },
-  { ticker: 'PG', amount: 1.06, exDaysAgo: -22, payDaysAgo: -37 },
-  { ticker: 'JPM', amount: 1.4, exDaysAgo: -15, payDaysAgo: -30 },
-  { ticker: 'XOM', amount: 0.99, exDaysAgo: -8, payDaysAgo: -23 },
-  { ticker: 'AAPL', amount: 0.26, exDaysAgo: 74, payDaysAgo: 89 },
-  { ticker: 'KO', amount: 0.51, exDaysAgo: 89, payDaysAgo: 104 },
-].map((d) => ({
-  ticker: d.ticker,
-  exDividendDate: dateOnly(daysAgo(d.exDaysAgo)),
-  payDate: dateOnly(daysAgo(d.payDaysAgo)),
-  recordDate: dateOnly(daysAgo(d.exDaysAgo + 2)),
-  declaredDate: dateOnly(daysAgo(d.exDaysAgo + 20)),
-  amount: d.amount,
-  currency: 'USD',
-  source: 'seed',
-}));
+// Current quarterly dividend + approximate annual dividend growth rate, used to
+// generate ~5 years of realistic quarterly history per payer (for CAGR calcs)
+// plus near-term entries for the calendar.
+const DIVIDEND_PAYERS: { ticker: string; currentQuarterly: number; annualGrowth: number }[] = [
+  { ticker: 'AAPL', currentQuarterly: 0.26, annualGrowth: 0.05 },
+  { ticker: 'MSFT', currentQuarterly: 0.83, annualGrowth: 0.1 },
+  { ticker: 'JNJ', currentQuarterly: 1.24, annualGrowth: 0.05 },
+  { ticker: 'KO', currentQuarterly: 0.51, annualGrowth: 0.05 },
+  { ticker: 'PG', currentQuarterly: 1.06, annualGrowth: 0.06 },
+  { ticker: 'JPM', currentQuarterly: 1.4, annualGrowth: 0.1 },
+  { ticker: 'XOM', currentQuarterly: 0.99, annualGrowth: 0.04 },
+];
+
+function generateDividendHistory() {
+  const entries: { ticker: string; exDividendDate: string; payDate: string; recordDate: string; declaredDate: string; amount: number; currency: string; source: string }[] = [];
+
+  for (const payer of DIVIDEND_PAYERS) {
+    // 21 quarters back (~5 years) through 1 quarter forward (next scheduled payment)
+    for (let q = -1; q <= 20; q++) {
+      const exDaysAgo = q * 91 - 5; // stagger tickers slightly off a shared cadence
+      const yearsAgo = q / 4;
+      const amount = Math.round(payer.currentQuarterly / Math.pow(1 + payer.annualGrowth, yearsAgo) * 100) / 100;
+      entries.push({
+        ticker: payer.ticker,
+        exDividendDate: dateOnly(daysAgo(exDaysAgo)),
+        payDate: dateOnly(daysAgo(exDaysAgo - 15)),
+        recordDate: dateOnly(daysAgo(exDaysAgo - 2)),
+        declaredDate: dateOnly(daysAgo(exDaysAgo + 20)),
+        amount,
+        currency: 'USD',
+        source: 'seed',
+      });
+    }
+  }
+  return entries;
+}
+
+export const seedDividends = generateDividendHistory();
 
 export { daysAgo, daysFromNow, dateOnly };

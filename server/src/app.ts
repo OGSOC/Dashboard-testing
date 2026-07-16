@@ -30,6 +30,10 @@ export function createApp() {
 
   app.use('/api', apiRouter);
 
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: `No route for ${req.method} ${req.originalUrl}` });
+  });
+
   app.use(errorHandler);
 
   return app;

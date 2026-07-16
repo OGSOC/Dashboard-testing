@@ -29,6 +29,7 @@ export interface Holding {
   brokerageAccountName: string;
   ticker: string;
   quantity: number;
+  currency: string;
   avgCostBasis: number;
   totalCost: number;
   lastPrice: number | null;
@@ -39,6 +40,7 @@ export interface Holding {
 }
 
 export interface PortfolioSummary {
+  currency: string;
   totalMarketValue: number;
   totalCost: number;
   totalUnrealizedGain: number;
@@ -46,16 +48,21 @@ export interface PortfolioSummary {
   dayChangeValue: number;
   dayChangePct: number;
   holdingCount: number;
+  unpricedHoldingCount: number;
+  unpricedCost: number;
 }
 
 export interface BrokerageAccount {
   id: string;
   broker: string;
   accountName: string;
+  currency: string;
   createdAt: string;
 }
 
 export type ImportBatchStatus = 'pending_review' | 'committed' | 'failed';
+
+export type SpecialImportMode = 'snowball_holdings_snapshot' | 'snowball_transactions' | null;
 
 export interface ImportBatchPreview {
   importBatchId: string;
@@ -64,6 +71,16 @@ export interface ImportBatchPreview {
   suggestedMapping: Record<string, string | null>;
   previewRows: Record<string, string>[];
   rowCount: number;
+  isSnapshotFormat: boolean;
+  specialImportMode: SpecialImportMode;
+  snapshotSummary: { tickerCount: number; currencies: string[] } | null;
+  transactionsSummary: {
+    transactionCount: number;
+    skippedCount: number;
+    tickerCount: number;
+    currencies: string[];
+    dateRange: { from: string; to: string } | null;
+  } | null;
 }
 
 export interface WatchlistItem {
@@ -96,6 +113,7 @@ export interface DividendIncomeEntry {
 export interface DividendSummary {
   totalReceivedYtd: number;
   totalReceivedTrailing12m: number;
+  totalReceivedAllTime: number;
   projectedNext12m: number;
   yieldOnCostByTicker: { ticker: string; yieldOnCost: number; annualIncome: number }[];
 }
@@ -170,6 +188,7 @@ export type NotificationType =
   | 'political_trade'
   | 'whale_trade'
   | 'dividend_reminder'
+  | 'dividend_increase'
   | 'news'
   | 'system';
 
@@ -194,8 +213,28 @@ export interface ProviderStatusEntry {
   usingSeedData: boolean;
 }
 
+export interface AnalystConsensus {
+  ticker: string;
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+}
+
+export interface MarketContextEntry {
+  news: NewsItem[];
+  consensus: AnalystConsensus | null;
+}
+
+export type MarketContextResponse = Record<string, MarketContextEntry>;
+
+export type SupportedCurrency = 'USD' | 'GBP' | 'EUR';
+
 export interface AuthUser {
   id: string;
   email: string;
   displayName: string | null;
+  displayCurrency: SupportedCurrency;
 }

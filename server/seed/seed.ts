@@ -33,7 +33,7 @@ async function main() {
   if (!account) {
     [account] = await db
       .insert(brokerageAccounts)
-      .values({ userId: user.id, broker: 'fidelity', accountName: 'Fidelity Individual' })
+      .values({ userId: user.id, broker: 'fidelity', accountName: 'Fidelity Individual', currency: 'USD' })
       .returning();
     console.log('Created default brokerage account');
 

@@ -1,9 +1,9 @@
 import { format } from 'date-fns';
-import { useWhaleTrades } from '../api/hooks/useMarketData';
-import { DataTable } from '../components/common/DataTable';
+import { useWhaleTrades, useMarketContext } from '../api/hooks/useMarketData';
 import { EmptyState } from '../components/common/EmptyState';
 import { Money } from '../components/common/Badges';
 import { ApiKeyMissingBanner } from '../components/common/ApiKeyMissingBanner';
+import { TickerContext } from '../components/common/TickerContext';
 
 const ACTION_LABELS: Record<string, string> = {
   new: 'New position',
@@ -15,6 +15,14 @@ const ACTION_LABELS: Record<string, string> = {
 
 export function WhaleActivityPage() {
   const { data: trades } = useWhaleTrades();
+  const tickers = Array.from(new Set((trades ?? []).map((t) => t.ticker)));
+  const { data: context } = useMarketContext(tickers);
+
+  const grouped = new Map<string, typeof trades>();
+  for (const t of trades ?? []) {
+    if (!grouped.has(t.ticker)) grouped.set(t.ticker, []);
+    grouped.get(t.ticker)!.push(t);
+  }
 
   return (
     <div>
@@ -30,39 +38,56 @@ export function WhaleActivityPage() {
 
       <ApiKeyMissingBanner providers={['sec_edgar']} />
 
-      <div className="card">
-        {(trades ?? []).length === 0 ? (
+      {(trades ?? []).length === 0 ? (
+        <div className="card">
           <EmptyState title="No whale activity found" body="Add holdings or watchlist tickers to track institutional moves." />
-        ) : (
-          <DataTable
-            rowKey={(t) => t.id}
-            rows={trades ?? []}
-            columns={[
-              { key: 'filed', header: 'Filed', render: (t) => format(new Date(t.filedDate), 'MMM d, yyyy') },
-              { key: 'ticker', header: 'Ticker', render: (t) => <span className="ticker-chip">{t.ticker}</span> },
-              { key: 'institution', header: 'Institution', render: (t) => t.institutionName },
-              { key: 'quarter', header: 'Quarter', render: (t) => t.quarter },
-              {
-                key: 'action',
-                header: 'Action',
-                render: (t) => (
-                  <span className={`badge ${t.action === 'increased' || t.action === 'new' ? 'badge-buy' : t.action === 'decreased' || t.action === 'closed' ? 'badge-sell' : 'badge-neutral'}`}>
-                    {ACTION_LABELS[t.action] ?? t.action}
-                  </span>
-                ),
-              },
-              { key: 'shares', header: 'Shares held', align: 'right', render: (t) => t.shares.toLocaleString() },
-              {
-                key: 'change',
-                header: 'Share change',
-                align: 'right',
-                render: (t) => (t.sharesChange !== null ? t.sharesChange.toLocaleString() : '—'),
-              },
-              { key: 'value', header: 'Value', align: 'right', render: (t) => <Money value={t.valueUsd} /> },
-            ]}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {Array.from(grouped.entries()).map(([ticker, rows]) => (
+            <div className="card" key={ticker} style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="ticker-chip" style={{ fontSize: 15 }}>{ticker}</span>
+              </div>
+              <TickerContext context={context?.[ticker]} />
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Filed</th>
+                    <th>Institution</th>
+                    <th>Quarter</th>
+                    <th>Action</th>
+                    <th style={{ textAlign: 'right' }}>Shares held</th>
+                    <th style={{ textAlign: 'right' }}>Share change</th>
+                    <th style={{ textAlign: 'right' }}>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows!.map((t) => (
+                    <tr key={t.id}>
+                      <td>{format(new Date(t.filedDate), 'MMM d, yyyy')}</td>
+                      <td>{t.institutionName}</td>
+                      <td>{t.quarter}</td>
+                      <td>
+                        <span
+                          className={`badge ${t.action === 'increased' || t.action === 'new' ? 'badge-buy' : t.action === 'decreased' || t.action === 'closed' ? 'badge-sell' : 'badge-neutral'}`}
+                        >
+                          {ACTION_LABELS[t.action] ?? t.action}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{t.shares.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right' }}>{t.sharesChange !== null ? t.sharesChange.toLocaleString() : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <Money value={t.valueUsd} currency="USD" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

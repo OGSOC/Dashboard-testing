@@ -14,14 +14,14 @@ brokerageAccountsRouter.get('/', asyncHandler(async (req, res) => {
 
 brokerageAccountsRouter.post('/', asyncHandler(async (req, res) => {
   const userId = req.session.userId!;
-  const { broker, accountName } = req.body ?? {};
+  const { broker, accountName, currency } = req.body ?? {};
   if (typeof accountName !== 'string' || accountName.trim().length === 0) {
     res.status(400).json({ error: 'accountName is required' });
     return;
   }
   const [row] = await db
     .insert(brokerageAccounts)
-    .values({ userId, broker: broker || 'generic', accountName: accountName.trim() })
+    .values({ userId, broker: broker || 'generic', accountName: accountName.trim(), currency: currency || 'GBP' })
     .returning();
   res.status(201).json(row);
 }));
